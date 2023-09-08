@@ -23,6 +23,7 @@ conipher_clustering <- function(case_id,
                                 burn_in = 1000,
                                 seed = 1024,
                                 nProcs = 1,
+                                gender = 'female',
                                 ...) {
     patient              <- case_id
     new.dir              <- paste0(out_dir, "/")
@@ -58,7 +59,7 @@ conipher_clustering <- function(case_id,
     ### fix issue with sample names including '-'
     input_tsv$SAMPLE  <- gsub("-", "\\.", input_tsv$SAMPLE)
 
-    input_list     <- clustering_preprocess(input_tsv, new.dir = new.dir, subclonal_copy_correction = subclonal_copy_correction, multiple_test_correction = multiple_test_correction, only_truncal_subclonal_copy_correction = only_truncal_subclonal_copy_correction, fix_absentCCFs = fix_absentCCFs)
+    input_list     <- clustering_preprocess(input_tsv, new.dir = new.dir, subclonal_copy_correction = subclonal_copy_correction, multiple_test_correction = multiple_test_correction, only_truncal_subclonal_copy_correction = only_truncal_subclonal_copy_correction, fix_absentCCFs = fix_absentCCFs, gender = gender)
     sample.results <- clustering_run(input_list, nProcs = nProcs, new.dir = new.dir, burn_in = burn_in, pyclone_seed = seed, template.config.yaml = template.config.yaml)
     clustering_postprocess(input_list, sample.results, new.dir = new.dir, input_tsv = input_tsv, input_seg_tsv_loc = input_seg_tsv_loc, min_cluster_size = min_cluster_size, driver_cat = driver_cat, clean_clusters = clean_clusters, min_ccf_present = 0.1, clonal_cutOff = clonal_cutOff, propClonal_threshold = propClonal_threshold)
 }
@@ -90,8 +91,7 @@ conipher_clustering <- function(case_id,
 #' @importFrom dplyr "%>%"
 #' @export clustering_preprocess
 
-clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correction = TRUE, multiple_test_correction = TRUE, only_truncal_subclonal_copy_correction = TRUE, fix_absentCCFs = TRUE) {
-    gender  <- "male"
+clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correction = TRUE, multiple_test_correction = TRUE, only_truncal_subclonal_copy_correction = TRUE, fix_absentCCFs = TRUE, gender = 'female') {
     patient <- unique(input_table$CASE_ID)
     regions.to.use <- unique(input_table$SAMPLE)
     input_table[, "key"] <- paste(paste0("chr", input_table[, "CHR"]), 
@@ -173,8 +173,8 @@ clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correctio
                                COPY_NUMBER_B = input_table[, "COPY_NUMBER_B"], 
                                stringsAsFactors = FALSE)
 
-    mut.table    <- mut.table[mut.table$chr %in% 1:22,, drop = FALSE]
-    seg.mat.copy <- seg.mat.copy[seg.mat.copy$chr %in% 1:22,, drop = FALSE]
+    mut.table    <- mut.table[mut.table$chr %in% 1:23,, drop = FALSE]
+    seg.mat.copy <- seg.mat.copy[seg.mat.copy$chr %in% 1:23,, drop = FALSE]
 
     mut.table$mutation_id  <- paste(patient, mut.table$chr, mut.table$start, mut.table$ref, sep = ":")
     mut.table              <- mut.table[order(mut.table$max.VAF, decreasing = TRUE),]
@@ -197,11 +197,8 @@ clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correctio
     mut.table <- mut.table[!is.na(mut.table$max.VAF),, drop = FALSE]
 
     mut.table <- mut.table[mut.table$Use.For.Plots | mut.table$Use.For.Plots.Indel, ]
-    # mut.table <- mut.table[!((mut.table$Use.For.Plots & mut.table$max.var_count < 10) | is.na(mut.table$max.var_count)), ]
 
-
-
-    seg.mat.phylo      <- create.subclonal.copy.number(seg.mat.copy = seg.mat.copy,min.subclonal = 0.01)
+    seg.mat.phylo      <- create.subclonal.copy.number(seg.mat.copy = seg.mat.copy, min.subclonal = 0.01)
 
     if (subclonal_copy_correction %in% "FALSE") {
         cat('\nRunning without subclonal copy number mode')
@@ -231,7 +228,7 @@ clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correctio
 
     # determine the indelCorrectionFactor
     if (length(regions.to.use) > 1) {
-        indelCorrectionFactor <- determineIndelCorrectionFactor(patient = patient, mut.table = mut.table, regions.to.use = regions.to.use, seg.mat.phylo = seg.mat.phylo, seg.mat.copy = seg.mat.copy)
+        indelCorrectionFactor <- determineIndelCorrectionFactor(patient = patient, mut.table = mut.table, regions.to.use = regions.to.use, seg.mat.phylo = seg.mat.phylo, seg.mat.copy = seg.mat.copy, gender=gender)
         indelMuts <- rownames(mut.table[mut.table$Use.For.Plots.Indel %in% TRUE,, drop = FALSE])
     }
 
@@ -239,7 +236,7 @@ clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correctio
         region.mut.table <- mut.table
         region.seg.copy  <- seg.mat.copy[seg.mat.copy$SampleID %in% region,, drop = FALSE]
         region.seg.phylo <- seg.mat.phylo[seg.mat.phylo$SampleID %in% region,, drop = FALSE]
-        pyclone.table    <- data.frame(t(sapply(1:nrow(region.mut.table),identify.subclonal.mut.copy.number.ascat,region.mut.table,region.seg.phylo,region,patient)), stringsAsFactors = FALSE)
+        pyclone.table    <- data.frame(t(sapply(1:nrow(region.mut.table),identify.subclonal.mut.copy.number.ascat,region.mut.table,region.seg.phylo,region,patient, gender)), stringsAsFactors = FALSE)
         pyclone.table    <- pyclone.table[!is.na(pyclone.table$minor_cn),]
         pyclone.table    <- pyclone.table[!is.na(pyclone.table$ref_counts),]
         pyclone.table    <- pyclone.table[!duplicated(pyclone.table$mutation_id),]
@@ -352,7 +349,7 @@ clustering_preprocess <- function(input_table, new.dir, subclonal_copy_correctio
     }
 
     input_list <- list(patient = patient, new.dir = new.dir, mut.table = mut.table, seg.mat.phylo = seg.mat.phylo, phylo.region.list = phylo.region.list)
-    simpleClusterList <- findSimpleClusters(input_list)
+    simpleClusterList <- findSimpleClusters(input_list, gender = gender)
     ### fail safe to remove clusters of mutations not sufficiently present in any region
     simpleClusterList <- simpleClusterList[!sapply(strsplit(sapply(simpleClusterList, function(x) x$clusterBinary), split = ":"), function(y) all(y == "0"))]
     ### changing CCFs to 0 if cluster is absent

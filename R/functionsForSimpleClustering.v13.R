@@ -1,4 +1,4 @@
-findSimpleClusters <- function(input_list, runType = "WES") {
+findSimpleClusters <- function(input_list, runType = "WES", gender = 'female') {
     ######################################################################################################################################################
     ### summary of what's required for function
     ### phylo.region.list - output as part of the initial steps of pyclone script (this contains the CCF of each mutation in each region prior to cluster)
@@ -67,7 +67,7 @@ findSimpleClusters <- function(input_list, runType = "WES") {
 
             region.mut.table <- ClusterTable
             region.seg.copy  <- seg.mat.phylo[seg.mat.phylo$SampleID %in% region, , drop = FALSE]
-            pyclone.table    <- data.frame(t(sapply(1:nrow(region.mut.table), identify.subclonal.mut.copy.number.ascat, region.mut.table, region.seg.copy, region, patient)), stringsAsFactors = FALSE)
+            pyclone.table    <- data.frame(t(sapply(1:nrow(region.mut.table), identify.subclonal.mut.copy.number.ascat, region.mut.table, region.seg.copy, region, patient, gender)), stringsAsFactors = FALSE)
 
             na.mutations     <- pyclone.table[is.na(pyclone.table$minor_cn), , drop = FALSE]
             loss.mutations   <- pyclone.table[as.numeric(pyclone.table$major_cn) == 0 | (as.numeric(pyclone.table$var_counts) + as.numeric(pyclone.table$ref_counts) == 0), ]

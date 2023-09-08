@@ -135,9 +135,8 @@ create.subclonal.copy.number <- function(seg.mat.copy, min.subclonal = 0.1) {
 }
 
 
-determineIndelCorrectionFactor <- function(patient, mut.table, regions.to.use, seg.mat.phylo, seg.mat.copy) {
+determineIndelCorrectionFactor <- function(patient, mut.table, regions.to.use, seg.mat.phylo, seg.mat.copy, gender) {
     # First, determine which mutations are considered ubiquitous
-    gender <- "male"
     head(mut.table)
 
     #let's select the regions of interest
@@ -156,7 +155,7 @@ determineIndelCorrectionFactor <- function(patient, mut.table, regions.to.use, s
 
             region.seg.copy  <- seg.mat.copy[seg.mat.copy$SampleID %in% region,, drop = FALSE]
             region.seg.phylo <- seg.mat.phylo[seg.mat.phylo$SampleID %in% region,, drop = FALSE]
-            pyclone.table    <- data.frame(t(sapply(1:nrow(region.mut.table),identify.subclonal.mut.copy.number.ascat,region.mut.table,region.seg.phylo,region,patient)), stringsAsFactors=FALSE)
+            pyclone.table    <- data.frame(t(sapply(1:nrow(region.mut.table),identify.subclonal.mut.copy.number.ascat,region.mut.table,region.seg.phylo,region,patient, gender)), stringsAsFactors=FALSE)
             pyclone.table    <- pyclone.table[!is.na(pyclone.table$minor_cn),]
             pyclone.table    <- pyclone.table[!is.na(pyclone.table$ref_counts),]
             pyclone.table    <- pyclone.table[!duplicated(pyclone.table$mutation_id),]
@@ -165,7 +164,7 @@ determineIndelCorrectionFactor <- function(patient, mut.table, regions.to.use, s
 
             pyclone.table              <- pyclone.table[as.numeric(pyclone.table$ref_counts)+as.numeric(pyclone.table$var_counts)>=1,,drop=FALSE]
             region.earlyLate           <- earlyORlateGender(region=region,complete.mutation.table=pyclone.table,purity=sample.purity,gender=gender)
-            region.phyloCCF            <- calculate_phylo_ccf(region=region,complete.mutation.table=pyclone.table,purity=sample.purity,order.by.pos = TRUE,gender=gender)
+            region.phyloCCF            <- calculate_phylo_ccf(region=region,complete.mutation.table=pyclone.table,purity=sample.purity,order.by.pos = TRUE, gender=gender)
             region.phyloCCF            <- region.phyloCCF[!is.na(region.phyloCCF$phyloCCF),,drop=FALSE]
 
             region.phyloCCFIndel       <- region.phyloCCF[rownames(region.phyloCCF)%in%IndelMuts,,drop=FALSE]
@@ -182,7 +181,7 @@ determineIndelCorrectionFactor <- function(patient, mut.table, regions.to.use, s
     return(regionCorrectionFactors)
 }
 
-identify.subclonal.mut.copy.number.ascat <- function(x, sub.mat.mut, sub.mat.copy, region, sample, sex = 'male') {
+identify.subclonal.mut.copy.number.ascat <- function(x, sub.mat.mut, sub.mat.copy, region, sample, gender) {
   
  
   mut                  <- sub.mat.mut[x,,drop=FALSE]
@@ -204,7 +203,12 @@ identify.subclonal.mut.copy.number.ascat <- function(x, sub.mat.mut, sub.mat.cop
     var_counts          <- mut[,gsub("-","\\.",paste(region, ".var_count",sep=""))]    
   }
   
-  normal_cn           <- 2
+  # TODO CHANGE THIS IF MALE/FEMALE
+  normal_cn <- 2
+  if (as.numeric(mut$chr)==23) & (gender =='male') {
+    normal_cn <- 1
+  }
+
   region              <- region
   Reference_Base      <- mut$ref
   Alternate_Base      <- mut$var
@@ -325,15 +329,14 @@ earlyORlateGender <- function(region, complete.mutation.table, purity, gender) {
   {
     CNn      <- ifelse(do.call(rbind,strsplit(unlist(pyClone.tsv$mutation_id),split=":"))[,2]=='23'|do.call(rbind,strsplit(unlist(pyClone.tsv$mutation_id),split=":"))[,2]=='24',1,2)
     pyClone.tsv$normal_cn <- ifelse(do.call(rbind,strsplit(unlist(pyClone.tsv$mutation_id),split=":"))[,2]=='23'|do.call(rbind,strsplit(unlist(pyClone.tsv$mutation_id),split=":"))[,2]=='24',1,2)
-    
+    print(pyClone.tsv$normal_cn)
+    print('HEREE')
   }
   if(gender=='female')
   {
     CNn      <- rep(2,nrow(pyClone.tsv))
     pyClone.tsv$normal_cn <- rep(2,nrow(pyClone.tsv))
-  }
-    
-    
+  }    
                      
                      
   # Use sequenza to estimate theoretical VAFs for each type of copy number
